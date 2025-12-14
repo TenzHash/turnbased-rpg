@@ -21,10 +21,10 @@ ENEMIES = {
 }
 
 BOSSES = {
-    "Fantasy": {"name": "Elder Dragon", "hp": 80, "atk": 20, "xp": 100},
-    "Sci-Fi": {"name": "Mecha-Titan", "hp": 90, "atk": 18, "xp": 110},
-    "Horror": {"name": "Lich Lord", "hp": 75, "atk": 22, "xp": 120},
-    "Adventure": {"name": "Kraken", "hp": 100, "atk": 15, "xp": 130}
+    "Fantasy": {"name": "Elder Dragon", "hp": 150, "atk": 20, "xp": 100},
+    "Sci-Fi": {"name": "Mecha-Titan", "hp": 160, "atk": 18, "xp": 110},
+    "Horror": {"name": "Lich Lord", "hp": 140, "atk": 22, "xp": 120},
+    "Adventure": {"name": "Kraken", "hp": 180, "atk": 15, "xp": 130}
 }
 
 ITEMS = {
@@ -36,6 +36,12 @@ ITEMS = {
     "Dragon Plate": {"type": "armor", "value": 8, "cost": 300}
 }
 
+SPELLS = {
+    "1": {"name": "Fireball", "cost": 12, "dmg_mult": 2.5, "desc": "Huge Damage"},
+    "2": {"name": "Lightning", "cost": 8, "dmg_mult": 1.5, "desc": "Reliable Hit"},
+    "3": {"name": "Holy Light", "cost": 15, "heal": 60, "desc": "Restores HP"}
+}
+
 SAVE_FILE = "rpg_save.json"
 
 # --- CLASSES ---
@@ -43,20 +49,23 @@ SAVE_FILE = "rpg_save.json"
 class Player:
     def __init__(self):
         self.name = ""
+        self.state = "alive"
         self.hp = 100
         self.max_hp = 100
+        self.mp = 40
+        self.max_mp = 40
         self.base_attack = 10
-        self.potions = 1
         self.gold = 50
-        self.state = "alive"
-        # Inventory
-        self.inventory = [] 
-        self.equipped_weapon = None
-        self.equipped_armor = None
-        # NEW: Progression Stats
         self.xp = 0
         self.level = 1
         self.xp_to_next_level = 100
+        self.potions = 1
+        self.mana_potions = 1
+        self.inventory = [] 
+        self.equipped_weapon = None
+        self.equipped_armor = None
+        # NEW: Quest Attributes
+        self.active_quest = None # Stores dict: {'target': 'Goblin', 'count': 3, 'progress': 0, 'reward': 100}
 
     @property
     def total_attack(self):
@@ -67,14 +76,23 @@ class Player:
     def defense(self):
         return ITEMS[self.equipped_armor]['value'] if self.equipped_armor else 0
 
-    def heal(self):
+    def drink_potion(self):
         if self.potions > 0:
             heal_amount = 30
             self.hp = min(self.max_hp, self.hp + heal_amount)
             self.potions -= 1
-            print(f"\n✨ You drank a potion! HP restored to {self.hp}/{self.max_hp}.")
+            print(f"\n🧪 Glug... HP restored to {self.hp}/{self.max_hp}.")
         else:
-            print("\n❌ You are out of potions!")
+            print("\n❌ Out of Health Potions!")
+
+    def drink_mana_potion(self):
+        if self.mana_potions > 0:
+            mana_amount = 20
+            self.mp = min(self.max_mp, self.mp + mana_amount)
+            self.mana_potions -= 1
+            print(f"\n🧪 Glug... MP restored to {self.mp}/{self.max_mp}.")
+        else:
+            print("\n❌ Out of Mana Potions!")
 
     def take_damage(self, dmg):
         actual_dmg = max(1, dmg - self.defense)
@@ -82,61 +100,55 @@ class Player:
         if self.hp <= 0:
             self.hp = 0
             self.state = "dead"
-        print(f"   You took {actual_dmg} damage (reduced by {self.defense})! HP: {self.hp}/{self.max_hp}")
+        print(f"   🔻 Took {actual_dmg} dmg (Def: {self.defense}). HP: {self.hp}/{self.max_hp}")
 
-    # NEW: XP Handling
     def gain_xp(self, amount):
         self.xp += amount
         print(f"   ✨ Gained {amount} XP! ({self.xp}/{self.xp_to_next_level})")
-        
         while self.xp >= self.xp_to_next_level:
             self.level_up()
 
     def level_up(self):
         self.xp -= self.xp_to_next_level
         self.level += 1
-        self.xp_to_next_level = int(self.xp_to_next_level * 1.5) # Harder to level up each time
-        
-        # Stat boosts
+        self.xp_to_next_level = int(self.xp_to_next_level * 1.5)
         self.max_hp += 20
-        self.hp = self.max_hp # Full heal on level up
+        self.max_mp += 10
+        self.hp = self.max_hp
+        self.mp = self.max_mp
         self.base_attack += 3
-        
-        print(f"\n🌟🌟 LEVEL UP! You are now Level {self.level}! 🌟🌟")
-        print(f"   Max HP increased to {self.max_hp}")
-        print(f"   Base Attack increased to {self.base_attack}")
-        print(f"   Health fully restored!")
+        print(f"\n🌟 LEVEL UP! You are now Level {self.level}! 🌟")
+
+    # NEW: Quest Progress Check
+    def check_quest(self, enemy_name):
+        if self.active_quest:
+            if self.active_quest['target'] == enemy_name:
+                self.active_quest['progress'] += 1
+                print(f"   📜 Quest Update: {self.active_quest['target']} slain ({self.active_quest['progress']}/{self.active_quest['count']})")
+                
+                if self.active_quest['progress'] >= self.active_quest['count']:
+                    self.complete_quest()
+
+    def complete_quest(self):
+        reward = self.active_quest['reward']
+        xp_reward = self.active_quest['xp']
+        print(f"\n🎉 QUEST COMPLETE! You slew all {self.active_quest['target']}s!")
+        print(f"   💰 Reward: {reward} Gold, {xp_reward} XP")
+        self.gold += reward
+        self.gain_xp(xp_reward)
+        self.active_quest = None
 
     def to_dict(self):
-        return {
-            "name": self.name,
-            "hp": self.hp,
-            "max_hp": self.max_hp,
-            "base_attack": self.base_attack,
-            "potions": self.potions,
-            "gold": self.gold,
-            "inventory": self.inventory,
-            "equipped_weapon": self.equipped_weapon,
-            "equipped_armor": self.equipped_armor,
-            "xp": self.xp,
-            "level": self.level,
-            "xp_to_next_level": self.xp_to_next_level
-        }
+        return self.__dict__
 
     def from_dict(self, data):
-        self.name = data["name"]
-        self.hp = data["hp"]
-        self.max_hp = data["max_hp"]
-        self.base_attack = data["base_attack"]
-        self.potions = data["potions"]
-        self.gold = data["gold"]
-        self.inventory = data.get("inventory", [])
-        self.equipped_weapon = data.get("equipped_weapon", None)
-        self.equipped_armor = data.get("equipped_armor", None)
-        # Use .get() for backwards compatibility with old saves
-        self.xp = data.get("xp", 0)
-        self.level = data.get("level", 1)
-        self.xp_to_next_level = data.get("xp_to_next_level", 100)
+        for key, value in data.items():
+            setattr(self, key, value)
+        # Defaults for backward compatibility
+        if not hasattr(self, 'mp'): self.mp = 40
+        if not hasattr(self, 'max_mp'): self.max_mp = 40
+        if not hasattr(self, 'mana_potions'): self.mana_potions = 0
+        if not hasattr(self, 'active_quest'): self.active_quest = None
 
 class Game:
     def __init__(self):
@@ -156,7 +168,7 @@ class Game:
             choice = input(f"\n> Choose ({'/'.join(choices)}): ").lower().strip()
             if choice in choices:
                 return choice
-            print("Invalid choice. Try again.")
+            print("Invalid choice.")
 
     def save_game(self):
         data = {"player": self.player.to_dict(), "turn_count": self.turn_count}
@@ -172,173 +184,201 @@ class Game:
             data = json.load(f)
             self.player.from_dict(data["player"])
             self.turn_count = data["turn_count"]
-        print(f"\n📂 Save loaded! Welcome back, {self.player.name} (Lvl {self.player.level}).")
+        print(f"\n📂 Save loaded! Welcome back, {self.player.name}.")
         return True
 
     def main_menu(self):
-        self.type_text("=== RANDOM RPG v4.0 (ASCENSION UPDATE) ===")
+        self.type_text("=== RPG v6.0: THE QUEST UPDATE ===")
         print("1. New Game")
         print("2. Load Game")
         c = self.get_input(['1', '2'])
         if c == '2':
-            if self.load_game():
-                self.main_loop()
-            else:
-                self.setup_new_game()
-        else:
-            self.setup_new_game()
+            if self.load_game(): self.main_loop()
+            else: self.setup_new_game()
+        else: self.setup_new_game()
 
     def setup_new_game(self):
-        self.player.name = input("\nEnter your hero's name: ")
-        print("\nChoose your Class:")
-        print("1. Warrior (High HP)")
-        print("2. Rogue (High Attack)")
-        c = self.get_input(['1', '2'])
-        if c == '1':
-            self.player.max_hp = 120
-            self.player.hp = 120
-            self.player.base_attack = 12
-        else:
-            self.player.base_attack = 18
-            self.player.potions = 2
+        self.player.name = input("\nEnter name: ")
+        print("1. Warrior (HP+)")
+        print("2. Rogue (Atk+)")
+        print("3. Mage (MP+)")
+        c = self.get_input(['1', '2', '3'])
+        if c == '1': self.player.max_hp = 130; self.player.hp = 130
+        elif c == '2': self.player.base_attack = 14
+        elif c == '3': self.player.max_mp = 70; self.player.mp = 70
         self.main_loop()
 
-    def inventory_menu(self):
-        print(f"\n🎒 --- {self.player.name} (Lvl {self.player.level}) ---")
-        print(f"XP: {self.player.xp}/{self.player.xp_to_next_level}")
-        print(f"Gold: {self.player.gold}")
-        print(f"Stats: {self.player.total_attack} ATK | {self.player.defense} DEF")
-        print("Items:", ", ".join(self.player.inventory) if self.player.inventory else "Empty")
+    # --- EVENTS ---
+
+    def npc_quest_event(self, theme):
+        self.type_text("\n🗣️ You encounter a ragged survivor.")
         
-        equippables = [i for i in self.player.inventory]
-        if equippables:
-            print("\nTo equip item, type number. To exit, type 'x'.")
-            for idx, item in enumerate(equippables):
-                print(f"{idx+1}. {item} ({ITEMS[item]['type'].upper()})")
-            
-            choice = input("> ")
-            if choice.isdigit() and 1 <= int(choice) <= len(equippables):
-                item_name = equippables[int(choice)-1]
-                if ITEMS[item_name]['type'] == 'weapon':
-                    self.player.equipped_weapon = item_name
-                elif ITEMS[item_name]['type'] == 'armor':
-                    self.player.equipped_armor = item_name
-                print(f"✅ Equipped {item_name}!")
+        # Generate random quest based on current theme
+        target = random.choice(ENEMIES[theme])
+        count = random.randint(2, 4)
+        gold_reward = count * 30
+        xp_reward = count * 20
+        
+        print(f"Survivor: 'Those {target}s are everywhere... Can you take out {count} of them for me?'")
+        print(f"Rewards: {gold_reward} Gold, {xp_reward} XP")
+        
+        c = self.get_input(['yes', 'no'])
+        if c == 'yes':
+            self.player.active_quest = {
+                'target': target,
+                'count': count,
+                'progress': 0,
+                'reward': gold_reward,
+                'xp': xp_reward
+            }
+            print("Survivor: 'Thank you, hero!'")
+            self.type_text("📜 Quest Accepted!")
+        else:
+            print("Survivor: 'A shame...'")
 
-    def shop_event(self):
-        self.type_text("\n🏪 A Merchant has set up camp.")
-        while True:
-            print(f"\nGold: {self.player.gold}")
-            print("0. Buy Potion (50g)")
-            shop_items = list(ITEMS.keys())
-            for idx, item in enumerate(shop_items):
-                stats = f"Atk+{ITEMS[item]['value']}" if ITEMS[item]['type'] == 'weapon' else f"Def+{ITEMS[item]['value']}"
-                print(f"{idx+1}. {item} ({stats}) - {ITEMS[item]['cost']}g")
-            
-            print("Type number to buy, or 'x' to leave.")
-            choice = input("> ")
+    def cast_spell(self, target_name):
+        print(f"\n🔮 MP: {self.player.mp}/{self.player.max_mp}")
+        for k, v in SPELLS.items():
+            desc = f"Dmg x{v['dmg_mult']}" if 'dmg_mult' in v else f"Heal {v['heal']}"
+            print(f"{k}. {v['name']} ({v['cost']} MP) - {desc}")
+        print("x. Cancel")
+        c = input("> ")
+        if c in SPELLS:
+            spell = SPELLS[c]
+            if self.player.mp >= spell['cost']:
+                self.player.mp -= spell['cost']
+                print(f"⚡ Cast {spell['name']}!")
+                if c == "3":
+                    self.player.hp = min(self.player.max_hp, self.player.hp + spell['heal'])
+                    print(f"   ✨ Restored {spell['heal']} HP!")
+                    return 0
+                else:
+                    dmg = int(self.player.total_attack * spell['dmg_mult'])
+                    print(f"   🔥 Hit {target_name} for {dmg} damage!")
+                    return dmg
+            else: print("❌ Not enough Mana!"); return -1
+        return -1
 
-            if choice == 'x': break
-            elif choice == '0':
-                if self.player.gold >= 50:
-                    self.player.gold -= 50
-                    self.player.potions += 1
-                    print("✅ Purchased Potion.")
-                else: print("❌ Not enough gold.")
-            elif choice.isdigit() and 1 <= int(choice) <= len(shop_items):
-                item_name = shop_items[int(choice)-1]
-                cost = ITEMS[item_name]['cost']
-                if self.player.gold >= cost:
-                    self.player.gold -= cost
-                    self.player.inventory.append(item_name)
-                    print(f"✅ Bought {item_name}!")
-                else: print("❌ Not enough gold.")
+    def battle_logic(self, enemy_name, hp, atk, xp_reward, is_boss=False):
+        self.type_text(f"\n⚔️ BATTLE: {enemy_name} (HP: {hp})")
+        while hp > 0 and self.player.state == "alive":
+            print(f"\nHP: {self.player.hp} | MP: {self.player.mp}")
+            options = ['attack', 'magic', 'potion', 'run']
+            if is_boss: options.remove('run')
+            
+            action = self.get_input(options)
+            player_dmg = 0
+            
+            if action == 'attack':
+                player_dmg = random.randint(self.player.total_attack - 2, self.player.total_attack + 2)
+                print(f"⚔️ Swing: {player_dmg} dmg!")
+            elif action == 'magic':
+                s_dmg = self.cast_spell(enemy_name)
+                if s_dmg == -1: continue
+                player_dmg = s_dmg
+            elif action == 'potion':
+                p = self.get_input(['health', 'mana'])
+                if p == 'health': self.player.drink_potion()
+                else: self.player.drink_mana_potion()
+            elif action == 'run':
+                if random.random() > 0.5: print("🏃 Escaped!"); return
+                print("❌ Run failed!")
+
+            hp -= player_dmg
+            if hp > 0:
+                enemy_dmg = random.randint(atk - 3, atk + 3)
+                self.player.take_damage(max(1, enemy_dmg))
+
+        if self.player.state == "alive":
+            gold = random.randint(20, 60)
+            if is_boss: gold *= 3
+            self.player.gold += gold
+            self.player.gain_xp(xp_reward)
+            print(f"🏆 Victory! Looted {gold} Gold.")
+            
+            # CHECK QUEST PROGRESS
+            self.player.check_quest(enemy_name)
 
     def main_loop(self):
         while self.running and self.player.state == "alive":
             self.turn_count += 1
             print("\n" + "="*50)
-            print(f"TURN {self.turn_count} | Lvl {self.player.level} | HP: {self.player.hp}/{self.player.max_hp}")
+            q_text = f" | Quest: {self.player.active_quest['target']} ({self.player.active_quest['progress']}/{self.player.active_quest['count']})" if self.player.active_quest else ""
+            print(f"TURN {self.turn_count} | Lvl {self.player.level}{q_text}")
             print("="*50)
             
             loc = random.choice(LOCATIONS)
             self.type_text(f"\nLocation: {loc['name']}")
-            self.type_text(loc['desc'])
-
+            
+            # Event Roll
+            roll = random.randint(1, 20)
+            
             if self.turn_count % 5 == 0:
-                self.boss_event(loc['theme'])
-            else:
-                roll = random.randint(1, 10)
-                if roll <= 4: self.combat_event(loc['theme'])
-                elif roll <= 6: self.shop_event()
-                else: self.loot_event()
+                boss = BOSSES[loc['theme']]
+                self.type_text(f"⚠️ BOSS: {boss['name']}!")
+                self.battle_logic(boss['name'], boss['hp'], boss['atk'], boss['xp'], is_boss=True)
+            elif roll <= 2: # 10% chance for Quest NPC
+                if not self.player.active_quest:
+                    self.npc_quest_event(loc['theme'])
+                else:
+                    print("You see a survivor, but you are already on a mission.")
+            elif roll <= 10: # 40% chance for Combat
+                enemy = random.choice(ENEMIES[loc['theme']])
+                hp = random.randint(30, 60) + (self.player.level * 5)
+                self.battle_logic(enemy, hp, 10 + self.player.level, 30)
+            elif roll <= 14: # 20% Chance for Shop
+                self.shop_event()
+            else: # Rest is Loot
+                self.loot_event()
 
             if self.player.state == "alive":
-                print("\n[ACTION MENU]")
                 c = self.get_input(['continue', 'inventory', 'save', 'quit'])
                 if c == 'inventory': self.inventory_menu()
                 elif c == 'save': self.save_game()
                 elif c == 'quit': self.running = False
 
         if self.player.state == "dead":
-            self.type_text("\n💀 You have fallen.")
+            self.type_text("\n💀 GAME OVER.")
 
-    def boss_event(self, theme):
-        boss = BOSSES[theme]
-        name, hp, atk, xp_reward = boss["name"], boss["hp"], boss["atk"], boss["xp"]
-        self.type_text(f"\n⚠️⚠️ BOSS BATTLE: {name}! ⚠️⚠️")
-        
-        while hp > 0 and self.player.state == "alive":
-            print(f"Boss HP: {hp}")
-            action = self.get_input(['attack', 'heal'])
-            if action == 'attack':
-                dmg = random.randint(self.player.total_attack, self.player.total_attack + 5)
-                hp -= dmg
-                print(f"⚔️ Hit for {dmg}!")
-            elif action == 'heal': self.player.heal()
-            
-            if hp > 0: self.player.take_damage(random.randint(atk - 5, atk + 5))
+    def inventory_menu(self):
+        print(f"\n🎒 INVENTORY")
+        print(f"HP: {self.player.hp}/{self.player.max_hp}")
+        print(f"MP: {self.player.mp}/{self.player.max_mp}")
+        if self.player.active_quest:
+            q = self.player.active_quest
+            print(f"📜 Quest: Kill {q['target']} ({q['progress']}/{q['count']})")
+        else:
+            print("📜 Quest: None")
+        print("Items:", ", ".join(self.player.inventory) or "None")
 
-        if self.player.state == "alive":
-            print(f"\n🏆 SLAIN! Rewards: 200 Gold, {xp_reward} XP.")
-            self.player.gold += 200
-            self.player.gain_xp(xp_reward)
-
-    def combat_event(self, theme):
-        enemy = random.choice(ENEMIES[theme])
-        hp = random.randint(30 + (self.player.level*5), 60 + (self.player.level*5)) # Enemies scale slightly with level
-        atk = random.randint(8, 15)
-        xp_reward = random.randint(20, 50)
-        
-        self.type_text(f"\n⚔️ Combat: {enemy} (HP: {hp})")
-        while hp > 0 and self.player.state == "alive":
-            action = self.get_input(['attack', 'heal', 'run'])
-            if action == 'attack':
-                dmg = random.randint(self.player.total_attack - 2, self.player.total_attack + 2)
-                hp -= dmg
-                print(f"   Hit for {dmg}!")
-            elif action == 'heal': self.player.heal()
-            elif action == 'run':
-                if random.random() > 0.5: print("🏃 Escaped!"); return
-                print("❌ Failed to run!")
-            
-            if hp > 0: self.player.take_damage(random.randint(atk - 2, atk + 2))
-
-        if self.player.state == "alive":
-            gold = random.randint(15, 40)
-            self.player.gold += gold
-            print(f"🏆 Victory! Found {gold} gold.")
-            self.player.gain_xp(xp_reward)
+    def shop_event(self):
+        self.type_text("\n🏪 Merchant")
+        while True:
+            print(f"\nGold: {self.player.gold}")
+            print("1. HP Potion (50g)")
+            print("2. MP Potion (60g)")
+            print("3. Equipment")
+            print("x. Leave")
+            c = input("> ")
+            if c == '1': 
+                if self.player.gold >= 50: self.player.gold-=50; self.player.potions+=1; print("Bought HP Potion.")
+            elif c == '2':
+                if self.player.gold >= 60: self.player.gold-=60; self.player.mana_potions+=1; print("Bought MP Potion.")
+            elif c == '3':
+                for item_name, data in ITEMS.items(): print(f"- {item_name} ({data['cost']}g)")
+                buy = input("Name > ")
+                if buy in ITEMS and self.player.gold >= ITEMS[buy]['cost']:
+                    self.player.gold -= ITEMS[buy]['cost']; self.player.inventory.append(buy); print("Bought!")
+            elif c == 'x': break
 
     def loot_event(self):
-        self.type_text("\nA chest sits before you.")
+        self.type_text("\nA chest!")
         if self.get_input(['open', 'leave']) == 'open':
             if random.random() > 0.4:
-                gold = random.randint(20, 80)
-                self.player.gold += gold
-                print(f"💰 Found {gold} gold!")
+                g = random.randint(20, 80)
+                self.player.gold += g
+                print(f"💰 Found {g} gold!")
             else:
-                self.type_text("💥 It's a trap!")
                 self.player.take_damage(15)
 
 if __name__ == "__main__":
