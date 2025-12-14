@@ -1,1 +1,1 @@
-{"player": {"name": "ter", "hp": 47, "max_hp": 100, "base_attack": 18, "potions": 2, "gold": 101, "inventory": [], "equipped_weapon": null, "equipped_armor": null, "xp": 66, "level": 1, "xp_to_next_level": 100}, "turn_count": 2}
+{"player": {"name": "ter", "state": "alive", "hp": 32, "max_hp": 100, "mp": 40, "max_mp": 40, "base_attack": 18, "gold": 1, "xp": 66, "level": 1, "xp_to_next_level": 100, "potions": 2, "mana_potions": 1, "inventory": ["Nano-Suit"], "equipped_weapon": null, "equipped_armor": null, "active_quest": null}, "turn_count": 4}
