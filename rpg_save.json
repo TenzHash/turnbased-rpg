@@ -1,1 +1,1 @@
-{"player": {"name": "Ter", "hp": 58, "max_hp": 100, "attack": 18, "potions": 2, "gold": 44}, "turn_count": 3}
+{"player": {"name": "ter", "hp": 47, "max_hp": 100, "base_attack": 18, "potions": 2, "gold": 101, "inventory": [], "equipped_weapon": null, "equipped_armor": null, "xp": 66, "level": 1, "xp_to_next_level": 100}, "turn_count": 2}
